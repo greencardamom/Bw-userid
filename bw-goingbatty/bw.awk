@@ -681,7 +681,7 @@ function uniq(names,    b,c,i,x) {
         c = split(names, b, "\n")
         names = "" # free memory
         for(i = 1; i <= c; i++) {
-            gsub(/\\["]/,"\"",b[i])      # convert \" to "
+            gsub(/\\"/,"\"",b[i])      # convert \" to "
             if(b[i] ~ "for API usage") { # Max lag exceeded.
                 print "Max lag exceeded for " G["name"] " - aborting. Try again when API servers less busy or increase Maxlag." > "/dev/stderr"
                 debug("Warning (max lag exceeded): For " G["name"] " - aborting. Try again when API servers less busy or increase Maxlag.")
@@ -717,12 +717,12 @@ function apierror(input, type,code) {
         }                  
 
         if(type == "json") {
-          if(match(input, /"error"[:]{"code"[:]"[^\"]*","info"[:]"[^\"]*"/, code) > 0) {
+          if(match(input, /"error"[:]{"code"[:]"[^"]*","info"[:]"[^"]*"/, code) > 0) {
             return 1
           }
         }
         else if(type == "xml") {
-          if(match(input, /error code[=]"[^\"]*" info[=]"[^\"]*"/, code) > 0) {
+          if(match(input, /error code[=]"[^"]*" info[=]"[^"]*"/, code) > 0) {
             return 1
           }
         }
@@ -876,7 +876,7 @@ function tokenize(a1,   myspace) {
         # POSIX character classes (gawk) 
         # Replaced regex constant for string constant, see https://github.com/step-/JSON.awk/issues/1
         myspace="[[:space:]]+"
-        gsub(/\"[^[:cntrl:]\"\\]*((\\[^u[:cntrl:]]|\\u[0-9a-fA-F]{4})[^[:cntrl:]\"\\]*)*\"|-?(0|[1-9][0-9]*)([.][0-9]*)?([eE][+-]?[0-9]*)?|null|false|true|[[:space:]]+|./, "\n&", a1)
+        gsub(/"[^[:cntrl:]"\\]*((\\[^u[:cntrl:]]|\\u[0-9a-fA-F]{4})[^[:cntrl:]"\\]*)*"|-?(0|[1-9][0-9]*)([.][0-9]*)?([eE][+-]?[0-9]*)?|null|false|true|[[:space:]]+|./, "\n&", a1)
         gsub("\n" myspace, "\n", a1)
         sub(/^\n/, "", a1)
         ITOKENS=0 
