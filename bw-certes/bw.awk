@@ -152,6 +152,7 @@ Exe["uniq"] = "/usr/bin/uniq"
         G["files_local"]  = "bw bw.cfg"
         G["cfgfile"]      = "bw.cfg"
         G["max"]          = 100         # Max changes to include in an email alert
+        Agent = G["api agent"]
 
         if(stopbutton() == "RUN") {
           if(! makecfgfile(G["path"] G["cfgfile"])) {

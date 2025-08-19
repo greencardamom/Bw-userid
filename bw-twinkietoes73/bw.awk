@@ -127,6 +127,7 @@ Exe["date"] = "/bin/date"
         G["files_local"]  = "bw bw.cfg"
         G["cfgfile"]      = "bw.cfg"
         G["max"]          = 100         # Max changes to include in an email alert
+        Agent             = G["api agent"]
 
         if ( substr(G["path"],length(G["path"]) ) != "/")
             G["path"] = G["path"] "/"
