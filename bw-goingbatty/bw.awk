@@ -381,8 +381,9 @@ function main(cfgfile		,V ,name, br, va, a, aa, i, ii, head, res, tot) {
               else
                 break
               if(i == 10) {
-                V["command2"] = sprintf("mail -s 'New Backlinks at Wikipedia bw -- failed upload tablebody.txt")
-                sys2var(V["command2"])
+                email(Exe["from_email"], Exe["to_email"], "NOTIFY: Backlinks at Wikipedia bw-goingbatty -- failed upload tablebody.txt", "" )
+                #V["command2"] = sprintf("mail -s 'New Backlinks at Wikipedia bw -- failed upload tablebody.txt")
+                #sys2var(V["command2"])
               }
             }
           }
