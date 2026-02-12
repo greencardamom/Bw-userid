@@ -36,6 +36,23 @@
 #    14 May 2015  - First version.
 #
 
+BEGIN { # Bot cfg
+
+  _defaults = "home      = /home/greenc/toolforge/bw-goingbatty/ \
+               emailfp   = /home/greenc/scripts/secrets/greenc.email \
+               userid    = User:GreenC \
+               version   = 1.5 \
+               copyright = 2026"
+
+  asplit(G, _defaults, "[ ]*[=][ ]*", "[ ]{9,}")
+  BotName = "bw-goingbatty"
+  Home = G["home"]
+
+  # Agent string format non-compliance could result in 429 (too many requests) rejections by WMF API
+  Agent = BotName "-" G["version"] "-" G["copyright"] " (" G["userid"] "; mailto:" strip(readfile(G["emailfp"])) ")"
+
+}
+
 @include "library"
 
 BEGIN{
