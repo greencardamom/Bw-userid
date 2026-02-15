@@ -955,3 +955,15 @@ function stopbutton(   bb,button,command,url,butt,i,a,j) {
   return "STOP"
 }
 
+
+#
+# https://github.com/greencardamom/HealthcheckWatch
+# acre:[/home/greenc/toolforge/healthcheckwatch]
+#
+function healthcheckwatch(  command) {
+
+  command = "/usr/bin/curl -s -X POST " shquote("https://healthcheckwatch.wbcqanjidyjcjbe.workers.dev/ping/acre-bw-goingbatty") " -H " shquote("Authorization: Bearer Xn*izT%(^pI8J/q+Mn*ipT%(^pI9J/q") " -H " shquote("Content-Type: application/json") " -d " shquote("{ \"timeout\": 30, \"subject\": \"NOTIFY (HCW): bw-goingbatty.awk\", \"body\": \"acre: /home/greenc/toolforge/bw-goingbatty/bw.awk (no response). Also check the debug file for error messages.\" }")
+  system(command)
+  exit
+
+}
