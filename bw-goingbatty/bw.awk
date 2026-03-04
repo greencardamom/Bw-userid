@@ -222,7 +222,7 @@ function makecfgfile(cfgfile, url,command,fp,a,i) {
 }
 
 
-function main(cfgfile		,V ,name, br, va, a, aa, i, ii, head, res, tot) {
+function main(cfgfile		,V ,name, br, va, a, aa, i, ii, head, res, tot, v_maxlag, v_sleep) {
 
         G["tablebodytxt"] = G["path"] "tablebody.txt"
         removefile2(G["tablebodytxt"])
@@ -388,20 +388,37 @@ function main(cfgfile		,V ,name, br, va, a, aa, i, ii, head, res, tot) {
 
         if ( G["newflag"] ) {
           print "|}" >> G["tablebodytxt"]
-          V["command"] = "wikiget -E " G["table_page"] " -S " shquote("New backlinks for " sys2var("date +\"%Y-%m-%d\"")) " -P " shquote(G["tablebodytxt"])
+          
           if(G["post_table"]) {
-            debug(V["command"])
-            for(i = 1; i <= 10; i++) {
+            v_maxlag = 5
+            v_sleep  = 5
+
+            for(i = 1; i <= 5; i++) {
+              V["command"] = "wikiget -m " v_maxlag " -E " G["table_page"] " -S " shquote("New backlinks for " sys2var("date +\"%Y-%m-%d\"")) " -P " shquote(G["tablebodytxt"])
+              
+              debug("Attempt " i ": " V["command"])
               res = sys2var(V["command"])
-              if(res !~ "Success") 
-                sleep(30, "unix")
-              else
+
+              if(res ~ "Success") {
                 break
-              if(i == 10) {
-                email(Exe["from_email"], Exe["to_email"], "NOTIFY: Backlinks at Wikipedia bw-goingbatty -- failed upload tablebody.txt", "" )
-                #V["command2"] = sprintf("mail -s 'New Backlinks at Wikipedia bw -- failed upload tablebody.txt")
-                #sys2var(V["command2"])
               }
+
+              if(i == 5) {
+                email(Exe["from_email"], Exe["to_email"], "NOTIFY: Backlinks at Wikipedia bw-goingbatty -- failed upload tablebody.txt", "" )
+                break
+              }
+
+              # Progressive Backoff
+              sleep(v_sleep, "unix")
+              
+              # Ramp up maxlag: 5 -> 10 -> 15 -> 20 (capped at 20)
+              v_maxlag += 5
+              if (v_maxlag > 20) v_maxlag = 20
+              
+              # Increase sleep: 5 -> 10 -> 15 -> 20...
+              v_sleep += 5
+              if (v_sleep > 20) v_sleep = 20
+              
             }
           }
         }
@@ -957,13 +974,16 @@ function stopbutton(   bb,button,command,url,butt,i,a,j) {
 
 
 #
-# https://github.com/greencardamom/HealthcheckWatch
-# acre:[/home/greenc/toolforge/healthcheckwatch]
+# Ping Healthcheckwatch API
 #
-function healthcheckwatch(  command) {
+# Git: https://github.com/greencardamom/HealthcheckWatch
+# Install: acre:[/home/greenc/toolforge/healthcheckwatch]
+# Library: ~/BotWikiAwk/lib/syscfg.awk
+# Wrapper: ~/scripts/healthcheckwatchping.sh
+#
+function healthcheckwatch() {
 
-  command = "/usr/bin/curl -s -X POST " shquote("https://healthcheckwatch.wbcqanjidyjcjbe.workers.dev/ping/acre-bw-goingbatty") " -H " shquote("Authorization: Bearer Xn*izT%(^pI8J/q+Mn*ipT%(^pI9J/q") " -H " shquote("Content-Type: application/json") " -d " shquote("{ \"timeout\": 30, \"subject\": \"NOTIFY (HCW): bw-goingbatty.awk\", \"body\": \"acre: /home/greenc/toolforge/bw-goingbatty/bw.awk (no response). Also check the debug file for error messages.\" }")
-  system(command)
+  hcw_ping("acre-bw-goingbatty", 30, "NOTIFY (HCW): bw-goingbatty.awk", "acre: /home/greenc/toolforge/bw-goingbatty/bw.awk (no response). Also check the debug file for error messages.")
   exit
 
 }
