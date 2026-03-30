@@ -17,6 +17,8 @@
 #
 # History:
 #
+#    29 Mar 2026  - Removed all network and JSON code. Migrated to wikiget.awk
+#
 #    01 Dec 2016  - Add shquote(), urlencodeawk() .. made safe for article names with unusual characters
 #                   Add apierror()  
 #                   Bug fix in &iucontinue (missing)
@@ -41,7 +43,7 @@ BEGIN { # Bot cfg
   _defaults = "home      = /home/greenc/toolforge/bw-goingbatty/ \
                emailfp   = /home/greenc/scripts/secrets/greenc.email \
                userid    = User:GreenC \
-               version   = 1.5 \
+               version   = 2.0 \
                copyright = 2026"
 
   asplit(G, _defaults, "[ ]*[=][ ]*", "[ ]{9,}")
@@ -139,8 +141,8 @@ G["maxlag"] = 10
 #            10. An API agent string. Can be whatever, typically your contact info and name of program.
 
 G["api agent"] = "Backlinks Watchlist (User:GreenC on en)"
-G["stop_button"] = "https://en.wikipedia.org/w/index.php?title=User:GoingBatty/stopbutton"
-G["cfg_page"] = "https://en.wikipedia.org/w/index.php?title=User:GoingBatty/Backlinks"
+G["stop_button"] = "User:GoingBatty/stopbutton"
+G["cfg_page"] = "User:GoingBatty/Backlinks"
 G["table_page"] = "User:GoingBatty/Backlinks/Report"
 
 # Configure to post table and/or email report
@@ -155,8 +157,7 @@ G["post_email"] = 0
 
 G["case_sensitive"] = 1
 
-Exe["wget"] = "/usr/bin/wget"
-Exe["timeout"] = "/usr/bin/timeout"
+Exe["wikiget"] = "/home/greenc/scripts/wikiget.awk"
 Exe["date"] = "/bin/date"
 Exe["sort"] = "/usr/bin/sort"
 Exe["uniq"] = "/usr/bin/uniq"
@@ -168,7 +169,7 @@ Exe["uniq"] = "/usr/bin/uniq"
 #
         debug("\n\t\t\t================ " strftime("%Y-%m-%d- %H:%M:%S") " =================")
 
-        G["files_system"] = "grep wget sleep mail cp rm mv wikiget timeout date"
+        G["files_system"] = "grep sleep mail cp rm mv date"
         G["files_local"]  = "bw bw.cfg"
         G["cfgfile"]      = "bw.cfg"
         G["max"]          = 100         # Max changes to include in an email alert
@@ -192,33 +193,29 @@ Exe["uniq"] = "/usr/bin/uniq"
         main(sprintf("%s%s",G["path"],G["cfgfile"]))
 }
 
-#
-# Download cfg page and create bw.cfg
-#
-function makecfgfile(cfgfile, url,command,fp,a,i) {
-
-  debug(cfgfile)
-  url = G["cfg_page"] "&action=raw"
-  debug(url)
-  fp = http2var(url)
-  if(! empty(fp)) {
-    removefile2(cfgfile)
-    for(i = 1; i <= splitn(fp, a, i); i++) {
-      if(a[i] ~ "^[*]") {
-        sub(/^[*][ ]*/, "", a[i])
-        if(! empty(strip(a[i]))) {
-          print strip(a[i]) >> cfgfile
+function makecfgfile(cfgfile,   command, fp, a, i) {
+        debug(cfgfile)
+        
+        command = Exe["wikiget"] " -w " shquote(G["cfg_page"])
+        fp = sys2var(command)
+        
+        if(!empty(fp) && fp !~ /^Unable to find/) {
+            removefile2(cfgfile)
+            for(i = 1; i <= splitn(fp, a, i); i++) {
+                if(a[i] ~ "^[*]") {
+                    sub(/^[*][ ]*/, "", a[i])
+                    if(!empty(strip(a[i]))) {
+                        print strip(a[i]) >> cfgfile
+                    }
+                }
+            }
+            close(cfgfile)
+            command = Exe["sort"] " " cfgfile " | " Exe["uniq"] " > " G["path"] "o; mv " G["path"] "o " cfgfile
+            debug(command)
+            sys2var(command)
+            return 1
         }
-      }
-    }
-    close(cfgfile)
-    command = Exe["sort"] " " cfgfile " | " Exe["uniq"] " > " G["path"] "o; mv " G["path"] "o " cfgfile
-    debug(command)
-    sys2var(command)
-    return 1
-  }
-  else
-    return 0
+        return 0
 }
 
 
@@ -278,7 +275,7 @@ function main(cfgfile		,V ,name, br, va, a, aa, i, ii, head, res, tot, v_maxlag,
 
             debug("raw backlinks = " br)
   
-            if ( br == 0 || br == "" ) {  # entity exists but has 0 backlinks or API maxlag timeout. Do nothing (restore files)
+            if ( br == 0 || br == "" ) {  # entity exists but has 0 backlinks
                 sys2var("mv -- " shquote(V["oldtxt"]) " " shquote(V["newtxt"]) )
                 sys2var("mv -- " shquote(V["otptxt"]) " " shquote(V["oldtxt"]) )
                 if(G["post_email"]) {
@@ -394,7 +391,7 @@ function main(cfgfile		,V ,name, br, va, a, aa, i, ii, head, res, tot, v_maxlag,
             v_sleep  = 5
 
             for(i = 1; i <= 5; i++) {
-              V["command"] = "wikiget -m " v_maxlag " -E " G["table_page"] " -S " shquote("New backlinks for " sys2var("date +\"%Y-%m-%d\"")) " -P " shquote(G["tablebodytxt"])
+              V["command"] = Exe["wikiget"] " -m " v_maxlag " -E " G["table_page"] " -S " shquote("New backlinks for " sys2var("date +\"%Y-%m-%d\"")) " -P " shquote(G["tablebodytxt"])
               
               debug("Attempt " i ": " V["command"])
               res = sys2var(V["command"])
@@ -433,67 +430,39 @@ function main(cfgfile		,V ,name, br, va, a, aa, i, ii, head, res, tot, v_maxlag,
 #
 #  return 0 if no links found (0 may or may not mean entity exists, see entity_exists() )
 #
-function backlinks(entity, outfile      ,url, blinks) {
 
-        sleep(10, "unix") # trying to prevent API problems
+#
+# backlinks - fetches backlinks via wikiget + Oauth and saves to outfile
+#
+function backlinks(entity, outfile      ,blinks, a, i, clean_list, types_regex, command) {
 
-        url = "http://en.wikipedia.org/w/api.php?action=query&list=backlinks&bltitle=" urlencodeawk(entity) "&blredirect&bllimit=250&continue=&blfilterredir=nonredirects&format=json&utf8=1&maxlag=" G["maxlag"]
 
-        blinks = getbacklinks(url, entity, "blcontinue") # normal backlinks
+        # wikiget handles normal, transcluded, file logic, and deduplication natively
+        command = Exe["wikiget"] " -b " shquote(entity)
+        blinks = sys2var(command)
 
-        if ( entity ~ "^Template:") {    # transclusion backlinks
-            url = "http://en.wikipedia.org/w/api.php?action=query&list=embeddedin&eititle=" urlencodeawk(entity) "&continue=&eilimit=500&continue=&format=json&utf8=1&maxlag=" G["maxlag"]
-            blinks = blinks "\n" getbacklinks(url, entity, "eicontinue")
-        } else if ( entity ~ "^File:") { # file backlinks
-            url = "http://en.wikipedia.org/w/api.php?action=query&list=imageusage&iutitle=" urlencodeawk(entity) "&iuredirect&iulimit=250&continue=&iufilterredir=nonredirects&format=json&utf8=1&maxlag=" G["maxlag"]
-            blinks = blinks "\n" getbacklinks(url, entity, "iucontinue")
+        # Determine which exclusion regex to use (global or entity-specific override)
+        types_regex = (T[entity] != "") ? T[entity] : G["types"]
+
+        # Apply the namespace exclusions (if not set to "ALL")
+        if (types_regex != "ALL" && length(blinks) > 0) {
+            split(blinks, a, "\n")
+            for (i in a) {
+                if (a[i] != "" && a[i] !~ types_regex) {
+                    clean_list = clean_list (clean_list ? "\n" : "") a[i]
+                }
+            }
+            blinks = clean_list
         }
 
-        blinks = uniq(blinks)
-
-        if(length(blinks) > 0)
-          print blinks > outfile
+        # Write the final clean list to the target file
+        if(length(blinks) > 0) {
+            print blinks > outfile
+        }
 
         close(outfile)
         system("")
         return length(blinks)
-
-}
-function getbacklinks(url, entity, method,      jsonin, jsonout, continuecode) {
-
-        jsonin = http2var(url)
-        if(apierror(jsonin, "json") > 0)
-          return ""
-        jsonout = json2var(jsonin)
-        continuecode = getcontinue(jsonin, method)
-
-        while ( continuecode != "-1-1!!-1-1" ) {
-
-            if ( method == "eicontinue" )
-                url = "http://en.wikipedia.org/w/api.php?action=query&list=embeddedin&eititle=" urlencodeawk(entity) "&eilimit=500&continue=" urlencodeawk("-||") "&eicontinue=" urlencodeawk(continuecode) "&format=json&utf8=1&maxlag=" G["maxlag"]
-            if ( method == "iucontinue" )
-                url = "http://en.wikipedia.org/w/api.php?action=query&list=imageusage&iutitle=" urlencodeawk(entity) "&iuredirect&iulimit=250&continue=" urlencodeawk("-||") "&iufilterredir=nonredirects&iucontinue=" urlencodeawk(continuecode) "&format=json&utf8=1&maxlag=" G["maxlag"]
-            if ( method == "blcontinue" )
-                url = "http://en.wikipedia.org/w/api.php?action=query&list=backlinks&bltitle=" urlencodeawk(entity) "&blredirect&bllimit=250&continue=" urlencodeawk("-||") "&blcontinue=" urlencodeawk(continuecode) "&blfilterredir=nonredirects&format=json&utf8=1&maxlag=" G["maxlag"]
-
-            jsonin = http2var(url)
-            jsonout = jsonout "\n" json2var(jsonin)
-            continuecode = getcontinue(jsonin, method)
-        }
-
-        return jsonout
-}
-function getcontinue(jsonin, method	,re,a,b,c) {
-
-	# "continue":{"blcontinue":"0|20304297","continue"
-
-        re = "\"continue\"[:][{]\"" method "\"[:]\"[^\"]*\""
-        match(jsonin, re, a)
-        split(a[0], b, "\"")
-        
-        if ( length(b[6]) > 0) 
-            return b[6]
-        return "-1-1!!-1-1"    
 }
 
 
@@ -501,14 +470,14 @@ function getcontinue(jsonin, method	,re,a,b,c) {
 # Remove article name from artList if the article does not contain a link of the correct case (upper or low)
 #   It is assumed the first letter of "linkname" is lowercase if you want lower and upper if you want that
 #
-function removeWrongCase(artList, linkname,  a,page,i,newList,ic,re) {
-
+function removeWrongCase(artList, linkname,  a,page,i,newList,ic,re,command) {
    ic = IGNORECASE
    IGNORECASE = 0
 
    for(i = 1; i <= splitn(artList, a, i); i++) {
-         page = http2var("https://en.wikipedia.org/w/index.php?title=" urlencodeawk(a[i]) "&action=raw")
-         if(! empty(page)) {
+         command = Exe["wikiget"] " -w " shquote(a[i])
+         page = sys2var(command)
+         if(! empty(page) && page !~ /^Unable to find/) {
            re = "([[]{2}" linkname "[]]{2}|[[]{2}" linkname "[ ]*[|])"
            if(page ~ re) 
              newList = a[i] "\n" newList
@@ -516,7 +485,6 @@ function removeWrongCase(artList, linkname,  a,page,i,newList,ic,re) {
    }
    IGNORECASE = ic
    return strip(newList)
-
 }
 
 #
@@ -528,14 +496,16 @@ function removeWrongCase(artList, linkname,  a,page,i,newList,ic,re) {
 #
 function subtractions(entity, newtext, oldtext,
 
-        list,c,a,i,page,first,out,first2,out2) {
+        list,c,a,i,page,first,out,first2,out2,command) {
 
         if(entity ~ /[Tt]emplate:|[Ff]ile:/) { # transclusions known to have database lags. Add others if seeing.
-            list = sys2var("grep -vxF -f " shquote(newtext) " -- " shquote(oldtext) )
+            command = "grep -vxF -f " shquote(newtext) " -- " shquote(oldtext)
+            list = sys2var(command)
             c = split(list, a, "\n")
             while(i++ < c) {
                 # Get wikisource of article where the entity was reportedly deleted
-                page = http2var("https://en.wikipedia.org/w/index.php?title=" urlencodeawk(a[i]) "&action=raw")
+                command = Exe["wikiget"] " -w " shquote(a[i])
+                page = sys2var(command)
                 # RE search article for entity. Include in deletion list if not found.
                 if(page !~ regstr(entity)) {
                     if(first == 0) {
@@ -635,11 +605,12 @@ function regesc(var,    c,a,i,out){
 # entity_exists - see if a page on Wikipedia exists
 #   eg. if ( ! entity_exists("Gutenberg author") ) print "Unknown page"
 #
-function entity_exists(entity	,url,jsonin) {
-
-        url = "https://en.wikipedia.org/w/api.php?action=query&titles=" urlencodeawk(entity) "&format=json"
-        jsonin = http2var(url)
-        if(jsonin ~ "\"missing\"") 
+function entity_exists(entity   ,res,command) {
+        if(empty(entity))
+          return 0
+        command = Exe["wikiget"] " -w " shquote(entity)
+        res = sys2var(command)
+        if(empty(res) || res ~ /^Unable to find/) 
             return 0
         return 1
 }
@@ -709,62 +680,12 @@ function files_verify(files_system, files_local, localdir,
 }
 
 #
-# Uniq a list of \n separated names obtained from Wikipedia API
-#
-function uniq(names,    b,c,i,x) {
-
-        delete x
-        c = split(names, b, "\n")
-        names = "" # free memory
-        for(i = 1; i <= c; i++) {
-            gsub(/\\"/,"\"",b[i])      # convert \" to "
-            if(b[i] ~ "for API usage") { # Max lag exceeded.
-                print "Max lag exceeded for " G["name"] " - aborting. Try again when API servers less busy or increase Maxlag." > "/dev/stderr"
-                debug("Warning (max lag exceeded): For " G["name"] " - aborting. Try again when API servers less busy or increase Maxlag.")
-                return
-            }
-            if(b[i] == "") {
-                continue
-            }
-            if(b[i] !~ G["types"] ) {
-                if(x[b[i]] == "") 
-                    x[b[i]] = b[i]
-            }
-        }
-        delete b # free memory
-        return join2(x,"\n")
-}
-
-#
 # Count elements in a string along div boundary
 #
 function countstr(str, div,   a) {
     return split(str, a, div)
 }
 
-
-#
-# Basic check of API results for error
-#
-function apierror(input, type,code) {
-
-        if(length(input) < 5) {
-          return 1
-        }                  
-
-        if(type == "json") {
-          if(match(input, /"error"[:]{"code"[:]"[^"]*","info"[:]"[^"]*"/, code) > 0) {
-            return 1
-          }
-        }
-        else if(type == "xml") {
-          if(match(input, /error code[=]"[^"]*" info[=]"[^"]*"/, code) > 0) {
-            return 1
-          }
-        }
-        else
-          return
-}
 
 #
 # Print debug to file G["debugout"]
@@ -777,151 +698,29 @@ function debug(str){
     }
 }
 
-
-# =====================================================================================================
-# JSON parse function. Returns a list of values parsed from json data.
-#   example:  jsonout = json2var(jsonin)
-# Returns a string containing values separated by "\n".
-# See the section marked "<--" in parse_value() to customize for your application.
+# 
+# stopbutton - check status of stop button page
+# 
+#  . return RUN or STOP
+#  . stop button page URL defined globally as 'StopButton' in botwiki.awk BEGIN{} section
 #
-# Credits: by User:Green Cardamom at en.wikipedia.org
-#          JSON parser derived from JSON.awk
-#          https://github.com/step-/JSON.awk.git
-# MIT license. May 2015        
-# =====================================================================================================
-function json2var(jsonin) {
+function stopbutton(    button,command) {
+        # wikiget handles network retries internally, so we only need to ask once
 
-        TOKEN=""
-        delete TOKENS
-        NTOKENS=ITOKENS=0
-        delete JPATHS
-        NJPATHS=0
-        VALUE=""
+        command = Exe["wikiget"] " -w " shquote(G["stop_button"])
+        button = sys2var(command)
 
-        tokenize(jsonin)
-
-        if ( parse() == 0 ) {
-          return join(JPATHS,1,NJPATHS, "\n")
+        if(length(button) < 2 || button ~ /^Unable to find/) {
+            debug("Aborted Button (page blank? wikipedia down?) - return RUN")
+            return "RUN"
         }
+
+        if(stopbutton_helper(1, button) == "RUN") return "RUN"
+
+        debug("ABORTED by stop button page. Return STOP")
+        return "STOP"
 }
-function parse_value(a1, a2,   jpath,ret,x) {
-        jpath=(a1!="" ? a1 "," : "") a2 # "${1:+$1,}$2"
-        if (TOKEN == "{") {
-                if (parse_object(jpath)) {
-                        return 7
-                }
-        } else if (TOKEN == "[") {
-                if (ret = parse_array(jpath)) {
-                        return ret
-        }
-        } else if (TOKEN ~ /^(|[^0-9])$/) {
-                # At this point, the only valid single-character tokens are digits.
-                return 9
-        } else {
-                VALUE=TOKEN
-        }
-        if (! (1 == BRIEF && ("" == jpath || "" == VALUE))) {
-
-                # This will print the full JSON data to help in building custom filter
-              #   x = sprintf("[%s]\t%s", jpath, VALUE)
-              #   print x
-
-                if ( a2 == "\"*\"" || a2 == "\"title\"" ) {     # <-- Custom filter for MediaWiki API. Add custom filters here.
-                    x = substr(VALUE, 2, length(VALUE) - 2)
-                    NJPATHS++
-                    JPATHS[NJPATHS] = x
-                }
-
-        }
-        return 0
-}
-function get_token() {
-        TOKEN = TOKENS[++ITOKENS] # for internal tokenize()
-        return ITOKENS < NTOKENS
-}
-function parse_array(a1,   idx,ary,ret) {
-        idx=0
-        ary=""
-        get_token()
-        if (TOKEN != "]") {
-                while (1) {
-                        if (ret = parse_value(a1, idx)) {
-                                return ret
-                        }
-                        idx=idx+1
-                        ary=ary VALUE
-                        get_token()
-                        if (TOKEN == "]") {
-                                break
-                        } else if (TOKEN == ",") {
-                                ary = ary ","
-                        } else {
-                                return 2
-                        }
-                        get_token()
-                }
-        }
-        VALUE=""
-        return 0
-}
-function parse_object(a1,   key,obj) {
-        obj=""
-        get_token()
-        if (TOKEN != "}") {
-                while (1) {
-                        if (TOKEN ~ /^".*"$/) {
-                                key=TOKEN
-                        } else {
-                                return 3
-                        }
-                        get_token()
-                        if (TOKEN != ":") {
-                                return 4
-                        }
-                        get_token()
-                        if (parse_value(a1, key)) {
-                                return 5
-                        }
-                        obj=obj key ":" VALUE
-                        get_token()
-                        if (TOKEN == "}") {
-                                break
-                        } else if (TOKEN == ",") {
-                                obj=obj ","
-                        } else {
-                                return 6
-                        }
-                        get_token()
-                }
-        }
-        VALUE=""
-        return 0
-}
-function parse(   ret) {
-        get_token()
-        if (ret = parse_value()) {
-                return ret
-        }
-        if (get_token()) {
-                return 11
-        }
-        return 0
-}
-function tokenize(a1,   myspace) {
-
-        # POSIX character classes (gawk) 
-        # Replaced regex constant for string constant, see https://github.com/step-/JSON.awk/issues/1
-        myspace="[[:space:]]+"
-        gsub(/"[^[:cntrl:]"\\]*((\\[^u[:cntrl:]]|\\u[0-9a-fA-F]{4})[^[:cntrl:]"\\]*)*"|-?(0|[1-9][0-9]*)([.][0-9]*)?([eE][+-]?[0-9]*)?|null|false|true|[[:space:]]+|./, "\n&", a1)
-        gsub("\n" myspace, "\n", a1)
-        sub(/^\n/, "", a1)
-        ITOKENS=0 
-        return NTOKENS = split(a1, TOKENS, /\n/)
-}
-
-
 function stopbutton_helper(k,button,  j,a) {
-
   for(j = 1; j <= splitn(button "\n", a, j); j++) {
     if(a[j] ~ /^[ ]*[#]/) continue
     if(a[j] ~ /^[Aa]ction[ ]{0,}[=][ ]{0,}[Rr][Uu][Nn]/) {
@@ -930,48 +729,6 @@ function stopbutton_helper(k,button,  j,a) {
     }
   }
 }
-
-# 
-# stopbutton - check status of stop button page
-# 
-#  . return RUN or STOP
-#  . stop button page URL defined globally as 'StopButton' in botwiki.awk BEGIN{} section
-#
-function stopbutton(   bb,button,command,url,butt,i,a,j) {
-
- # convert https://en.wikipedia.org/wiki/User:GreenC_bot/button
- #         https://en.wikipedia.org/w/index.php?title=User:GreenC_bot/button
- # if(urlElement(StopButton, "path") ~ /^\/wiki\// && urlElement(StopButton, "netloc") ~ /wikipedia[.]org/)
- #   StopButton = subs("/wiki/", "/w/index.php?title=", StopButton)
-
-  url = G["stop_button"] "&action=raw"
-  debug("stopbutton: " url)
-  button = http2var(url)
-
-  if(stopbutton_helper(1, button) == "RUN") return "RUN"
-
-  butt[2] = 2; butt[3] = 20; butt[4] = 60; butt[5] = 240
-  for(i = 2; i <= 5; i++) {
-    if(length(button) < 2) {
-      debug("Button try " i " - ")
-      sleep(butt[i], "unix")
-      button = http2var(url)
-    }
-    else break
-  }
-
-  if(length(button) < 2) {
-    debug("Aborted Button (page blank? wikipedia down?) - return RUN")
-    return "RUN"
-  }
-
-  if(stopbutton_helper(2, button) == "RUN") return "RUN"
-
-  debug("ABORTED by stop button page. Return STOP")
-
-  return "STOP"
-}
-
 
 #
 # Ping Healthcheckwatch API
